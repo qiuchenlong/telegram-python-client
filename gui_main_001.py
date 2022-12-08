@@ -106,7 +106,14 @@ class App(tkinter.Tk):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__app()
+
+        # telegram 客户端
         self.tgClientList = []
+        # # message template
+        # self.messageTemplate
+        # group/channle
+        self.groupList = []
+
         self.tk_frame_login = Frame_login(self)
         self.tk_listbox_account = None
         Frame_account(self)
@@ -115,10 +122,11 @@ class App(tkinter.Tk):
         Frame_Receiver(self)
         Frame_Button(self)
         # self.__tk_input_account()
-        self.tk_btn_testcase_sendmsg()
+        # self.tk_btn_testcase_sendmsg()
 
         # self.msg_queue = Queue.queue()
         self.__tk_label_nowtime()
+        self.__tk_btn_http_proxy()
 
         
 
@@ -139,6 +147,9 @@ class App(tkinter.Tk):
 
         self.after(1000, self.print_nowtime)
 
+    def __tk_btn_http_proxy(self):
+        self.tk_btn_setting = tkinter.Button(self, text="setting", command=self.on_btn_setting)
+        self.tk_btn_setting.place(x=950, y=40)
 
     
     def print_nowtime(self):
@@ -157,6 +168,98 @@ class App(tkinter.Tk):
  
         # t = threading.Thread(target=self.__show)
         # t.start()
+
+    
+
+    @callback
+    def on_btn_setting(self, event=None):
+        title = "Setting"
+        self.tk_modal_setting = tkinter.Toplevel()
+        self.tk_modal_setting.title(title)
+        root = self.tk_modal_setting
+
+        # 读取配置文件 config.ini
+        config = configparser.ConfigParser()
+        config.read("config_ini.ini")
+        self.conf = config
+
+        tkinter.Label(root, text="名称").grid(row=0, column=0)
+        self.tk_input_setting = tkinter.Entry(root)
+        self.tk_input_setting.grid(row=0, column=1)
+        self.tk_input_setting.insert(tkinter.END, config.get("baseconfig", "title"))
+
+
+        # Keep track of the button state on/off
+        #global is_on
+        self.is_on = True if config.get("proxy", "enable") == "1" else False
+
+        self.my_label = tkinter.Label(root, text="代理开关:{0}".format("开" if self.is_on else "关"))
+        self.my_label.grid(row=1, column=0)
+        
+        # Define Our Images
+        self.on = tkinter.PhotoImage(file="on.png")
+        self.off = tkinter.PhotoImage(file="off.png")
+
+        # Create A Button
+        self.on_button = tkinter.Button(root, image=self.on if self.is_on else self.off, bd=0, command = self.switch)
+        self.on_button.grid(row=1, column=1)
+
+
+        # self.tk_input_setting = tkinter.Entry(root)
+        # self.tk_input_setting.grid(row=1, column=1)
+        # self.tk_input_setting.insert(tkinter.END, config.get("proxy", "enable"))
+
+        tkinter.Label(root, text="代理模式(socks5/http)").grid(row=2, column=0)
+        self.tk_input_proxy_mode = tkinter.Entry(root)
+        self.tk_input_proxy_mode.grid(row=2, column=1)
+        self.tk_input_proxy_mode.insert(tkinter.END, config.get("proxy", "mode"))
+
+        tkinter.Label(root, text="代理地址").grid(row=3, column=0)
+        self.tk_input_proxy_host = tkinter.Entry(root)
+        self.tk_input_proxy_host.grid(row=3, column=1)
+        self.tk_input_proxy_host.insert(tkinter.END, config.get("proxy", "host"))
+
+        tkinter.Label(root, text="代理端口").grid(row=4, column=0)
+        self.tk_input_proxy_port = tkinter.Entry(root)
+        self.tk_input_proxy_port.grid(row=4, column=1)
+        self.tk_input_proxy_port.insert(tkinter.END, config.get("proxy", "port"))
+
+        tkinter.Button(root, text="Commit", command=self.on_btn_commit).grid(row=5, column=0)
+        tkinter.mainloop()
+
+    # Define our switch function
+    @callback
+    def switch(self, event=None):
+        # global is_on
+        
+        # Determine is on or off
+        if self.is_on:
+            self.on_button.config(image = self.off)
+            self.my_label.config(text = "代理开关:关",
+                            fg = "grey")
+            self.is_on = False
+        else:
+            self.on_button.config(image = self.on)
+            self.my_label.config(text = "代理开关:开", 
+                            fg = "green")
+            self.is_on = True
+
+
+
+    @callback
+    def on_btn_commit(self, event=None):
+        # save to config.ini
+        self.conf.set("baseconfig", "title", self.tk_input_setting.get().strip())
+        self.conf.set("proxy", "enable", "1" if self.is_on else "0")
+        self.conf.set("proxy", "mode", self.tk_input_proxy_mode.get().strip())
+        self.conf.set("proxy", "host", self.tk_input_proxy_host.get().strip())
+        self.conf.set("proxy", "port", self.tk_input_proxy_port.get().strip())
+        with open("config_ini.ini", "w") as configFile:
+            self.conf.write(configFile)
+
+        app_title_vaue = self.tk_input_setting.get().strip()
+        self.title(app_title_vaue)
+        self.tk_modal_setting.destroy()
 
 
 
@@ -348,7 +451,7 @@ class Frame_account(tkinter.LabelFrame):
 
     def __tk_listbox_account(self):
         self.tk_listbox_account = tkinter.Listbox(self, selectmode=tkinter.EXTENDED, height=12)
-        self.tk_listbox_account.place(x=0, y=0, width=250, height=520)
+        self.tk_listbox_account.place(x=0, y=0, width=250-5, height=450)
 
         data = readDataByName("account")
         account_data = data.split("\n")
@@ -361,11 +464,19 @@ class Frame_account(tkinter.LabelFrame):
         self.p.tk_listbox_account = self.tk_listbox_account
 
 
+        btn = tkinter.Button(self, text="remove", command=self.on_btn_remove_account)
+        # btn.configure(text="")
+        btn.place(x=0, y=460)
+
+    def on_btn_remove_account(self):
+        pass
+
 
 
 class Frame_time(tkinter.LabelFrame):
     def __init__(self, parent):
         super().__init__(parent)
+        self.parent = parent
         self.__frame()
         self.__tk_label_starttime()
 
@@ -375,22 +486,22 @@ class Frame_time(tkinter.LabelFrame):
     def __tk_label_starttime(self):
         tk_label_starttime = tkinter.Label(self, text="Start Time\n(eg: 2022-11-11 12:00:00)", justify="left")
         tk_label_starttime.place(x=0, y=0,)
-        self.tk_input_starttime = tkinter.Entry(self, )
-        self.tk_input_starttime.place(x=0, y=20*2, width=250-5)
-        self.tk_input_starttime.insert(0, "" + beijing_now.strftime("%Y-%m-%d %H:%M:%S"))
+        self.parent.tk_input_starttime = tkinter.Entry(self, )
+        self.parent.tk_input_starttime.place(x=0, y=20*2, width=250-5)
+        self.parent.tk_input_starttime.insert(0, "" + beijing_now.strftime("%Y-%m-%d %H:%M:%S"))
 
         tk_label_intervalstime = tkinter.Label(self, text="Intervals Time\n(eg: 1s)", justify="left")
         tk_label_intervalstime.place(x=0, y=20*4,)
-        self.tk_input_intervalstime = tkinter.Entry(self, )
-        self.tk_input_intervalstime.place(x=0, y=20*6, width=250-5)
-        self.tk_input_intervalstime.insert(0, "" + str(INTERVAL_TIME))
+        self.parent.tk_input_intervalstime = tkinter.Entry(self, )
+        self.parent.tk_input_intervalstime.place(x=0, y=20*6, width=250-5)
+        self.parent.tk_input_intervalstime.insert(0, "" + str(INTERVAL_TIME))
 
         tk_label_endtime = tkinter.Label(self, text="End Time\n(default: 6h)", justify="left")
         tk_label_endtime.place(x=0, y=20*8,)
-        self.tk_input_endstime = tkinter.Entry(self, )
-        self.tk_input_endstime.place(x=0, y=20*10, width=250-5)
+        self.parent.tk_input_endstime = tkinter.Entry(self, )
+        self.parent.tk_input_endstime.place(x=0, y=20*10, width=250-5)
         delta = timedelta(hours=6)
-        self.tk_input_endstime.insert(0, "" + (beijing_now + delta).strftime("%Y-%m-%d %H:%M:%S"))
+        self.parent.tk_input_endstime.insert(0, "" + (beijing_now + delta).strftime("%Y-%m-%d %H:%M:%S"))
 
 
 
@@ -398,6 +509,7 @@ class Frame_time(tkinter.LabelFrame):
 class Frame_messageTemplate(tkinter.LabelFrame):
     def __init__(self, parent):
         super().__init__(parent)
+        self.parent = parent
         self.__frame()
         self.__tk_template_text()
 
@@ -415,8 +527,8 @@ class Frame_messageTemplate(tkinter.LabelFrame):
         self.tk_checkbtn_text = tkinter.Checkbutton(self, variable=self.CheckVarText)
         self.tk_checkbtn_text.place(x=0, y=24, width=20, height=20)
 
-        self.textTemplateText = tkinter.Text(self)
-        self.textTemplateText.place(x=25, y=24, width=250- 30-5, height=200*1.5)
+        self.parent.tk_text_template_text = tkinter.Text(self)
+        self.parent.tk_text_template_text.place(x=25, y=24, width=250- 30-5, height=200*1.5)
 
 
         self.tk_checkbtn_image = tkinter.Checkbutton(self, variable=self.CheckVarImage)
@@ -447,6 +559,7 @@ class Frame_messageTemplate(tkinter.LabelFrame):
 class Frame_Receiver(tkinter.LabelFrame):
     def __init__(self, parent):
         super().__init__(parent)
+        self.groupList = parent.groupList
         self.__frame()
         self.__tk_group()
         self.__tk_phone()
@@ -467,7 +580,8 @@ class Frame_Receiver(tkinter.LabelFrame):
             if i == len(groupLinkDatas) - 1:
                 suffix = ""
             self.textGroup.insert(tkinter.END, groupLinkDatas[i] + suffix)
-    
+            self.groupList.append(groupLinkDatas[i])
+
     def __tk_phone(self):
         tkinter.Label(self, text="Phone:").place(x=0, y=200+10+24)
         self.textPhone = tkinter.Text(self)
@@ -498,11 +612,32 @@ class Frame_Receiver(tkinter.LabelFrame):
 class Frame_Button(tkinter.LabelFrame):
     def __init__(self, parent):
         super().__init__(parent)
-        self.p = parent
+        self.parent = parent
         self.__frame()
         self.__tk_btn_once_send()
         self.__tk_btn_schedule_send()
         self.__tk_btn_stop_send()
+
+
+
+        self.isScheduleTask = False
+        self.schedulerTaskCount = 0
+        self.schedulerTaskSuccessCount = 0
+        self.schedulerTaskFailedCount = 0
+        self.scheduler = AsyncIOScheduler()
+
+
+        self.scheduleTask = tkinter.Label(
+            self, 
+            text='定时任务:'+ ("运行中" if self.isScheduleTask else "未运行"),
+            bg='yellow'
+        )
+        self.scheduleTask.grid(row=1, column=4)
+
+        self.tk_label_send_status = tkinter.Label(self, text="")
+        self.tk_label_send_status.grid(row=1, column=3)
+
+
 
     def __frame(self):
         self.place(x=200, y=650, width=680, height=60)
@@ -519,20 +654,100 @@ class Frame_Button(tkinter.LabelFrame):
         btn_stop_send = tkinter.Button(self, text="停止发送", command=self.on_stop_send)
         btn_stop_send.grid(row=0, column=2)
 
+
+    async def send_msg(self):
+        # print(len(globalTgClientList))
+        # size = self.parent.tk_listbox_account.size()
+        # print(size)
+        # print(self.parent.groupList)
+
+        print("准备发送消息...")
+
+        messageValue = self.parent.tk_text_template_text.get("1.0", tkinter.END).strip()
+        
+        # 如果消息是空的,不允许发送
+        if messageValue == "":
+            return
+
+        print("发送消息...")
+        # self.parent.tk_listbox_account.delete(0, size - 1)
+        for tg in globalTgClientList:
+            for rec in self.parent.groupList:
+                try:
+                    chat_id = (await tg.get_entity(rec)).id
+                    await tg.send_message(chat_id, messageValue)
+                    self.schedulerTaskSuccessCount += 1
+                    if not self.isScheduleTask:
+                        self.tk_label_send_status.config(text="发送成功", bg="#0f0")
+                    else:
+                        self.tk_label_send_status.config(text="")
+                except Exception as e:
+                    print("err", e)
+                    self.schedulerTaskFailedCount += 1
+                    if not self.isScheduleTask:
+                        self.tk_label_send_status.config(text="发送失败", bg="#f00") 
+                    else:
+                        self.tk_label_send_status.config(text="")
+
+
+    def schedulerListener(self, event):
+        print("schedulerListener...", event)
+        # get_jobs = self.scheduler.get_jobs()
+        # print_jobs = self.scheduler.print_jobs()
+        # print(get_jobs)
+        # print(print_jobs)
+
+        # EVENT_JOB_REMOVED: 定时任务自动停止时             1024
+        # EVENT_SCHEDULER_SHUTDOWN: 定时任务主动移除时      2
+        if event.code == base.EVENT_JOB_REMOVED or event.code == base.EVENT_SCHEDULER_SHUTDOWN:
+            self.isScheduleTask = False
+        if event.code == base.EVENT_JOB_SUBMITTED:
+            print("执行定时任务")
+            self.schedulerTaskCount += 1
+
+        self.scheduleTask.config(
+            text='定时任务:'+ ("运行中, 已执行{0}次,成功{1}次,失败{2}次".format(self.schedulerTaskCount, self.schedulerTaskSuccessCount, self.schedulerTaskFailedCount) if self.isScheduleTask else "未运行"),
+            bg="red" if self.isScheduleTask else "yellow"
+        )
+
+
     @callback
-    def on_once_send(self):
-        print(len(globalTgClientList))
-        size = self.p.tk_listbox_account.size()
-        print(size)
-        # self.p.tk_listbox_account.delete(0, size - 1)
+    async def on_once_send(self):
+        await self.send_msg()
+
 
     @callback
     def on_schedule_send(self):
-        pass
+        if self.scheduler.running:
+            return
+
+        startTimeValue = self.parent.tk_input_starttime.get().strip()
+        loopTimeValue = self.parent.tk_input_intervalstime.get().strip()
+        endTimeValue = self.parent.tk_input_endstime.get().strip()
+        self.scheduler.remove_all_jobs()
+        self.scheduler.remove_listener(self.schedulerListener)
+        self.scheduler.add_job(
+            self.send_msg, 
+            trigger='interval', 
+            seconds=int(loopTimeValue), 
+            start_date=startTimeValue,
+            end_date=endTimeValue,
+        )
+        self.scheduler.start()
+        self.scheduler.add_listener(self.schedulerListener, )
+            # mask=base.EVENT_JOB_REMOVED | base.EVENT_SCHEDULER_SHUTDOWN) # 任务监听
+
+        self.isScheduleTask = True
+        self.schedulerTaskCount = 0
+        self.scheduleTask.config(
+            text='定时任务:'+ ("运行中, 已执行{0}次,成功{1}次,失败{2}次".format(self.schedulerTaskCount, self.schedulerTaskSuccessCount, self.schedulerTaskFailedCount) if self.isScheduleTask else "未运行"),
+            bg='red'
+        )
 
     @callback
     def on_stop_send(self):
-        pass
+        if self.scheduler.running:
+            self.scheduler.shutdown(wait=False)
     
 
 
@@ -543,9 +758,33 @@ class TgClient():
     
     def __init__(self, session):
         session = "{0}/{1}".format(sessionPath, session)
-        self.client = TelegramClient(session=session,
-            api_id=API_ID,
-            api_hash=API_HASH)
+
+        config = configparser.ConfigParser()
+        config.read("config_ini.ini")
+        enable = config.get("proxy", "enable")
+        mode = config.get("proxy", "mode")
+        host = config.get("proxy", "host")
+        port = config.get("proxy", "port")
+
+        if enable != None and mode != None and host != None and port != None and (enable == "1"):
+            if str(mode).lower() == "socks5":
+                self.client = TelegramClient(session, 
+                        API_ID, 
+                        API_HASH, 
+                        proxy=(socks.SOCKS5, host, int(port)))
+            elif str(mode).lower() == "http":
+                self.client = TelegramClient(session, 
+                        API_ID, 
+                        API_HASH, 
+                        proxy=(socks.HTTP, host, int(port)))
+            else:
+                self.client = TelegramClient(session=session,
+                    api_id=API_ID,
+                    api_hash=API_HASH)
+        else:
+            self.client = TelegramClient(session=session,
+                api_id=API_ID,
+                api_hash=API_HASH)
     
     def getClient(self):
         return self.client
