@@ -28,6 +28,8 @@ from telethon.tl.functions.messages import SendMessageRequest
 
 from apscheduler.schedulers import base
 
+import threading
+from queue import Queue
 
 import configparser
 
@@ -57,6 +59,20 @@ def appendDataByName(name, data):
 def readDataByName(name):
     return fileUtil.read_file_002("{0}{1}".format(dataPath, "/"+name+".csv"))
 
+
+
+## =================== time ===================
+# 间隔时间(秒)
+INTERVAL_TIME = 30
+SHA_TZ = timezone(
+    timedelta(hours=8),
+    name='Asia/Shanghai',
+)
+# 协调世界时
+utc_now = datetime.utcnow().replace(tzinfo=timezone.utc)
+# 北京时间
+beijing_now = utc_now.astimezone(SHA_TZ)
+## =================== time ===================
 
 
 def callback(func):
@@ -101,6 +117,9 @@ class App(tkinter.Tk):
         # self.__tk_input_account()
         self.tk_btn_testcase_sendmsg()
 
+        # self.msg_queue = Queue.queue()
+        self.__tk_label_nowtime()
+
         
 
         self.auto_login()
@@ -111,7 +130,35 @@ class App(tkinter.Tk):
         btn.grid(row=0, column=2)
         return btn
 
+    def __tk_label_nowtime(self):
+        self.tk_lbl_nowtime = tkinter.Label(self, text="{0}".format(beijing_now.strftime("%Y-%m-%d %H:%M:%S")))
+        self.tk_lbl_nowtime.place(x=900, y=10)
+       
+        # t = threading.Thread(target=self.print_nowtime, daemon=True)
+        # t.start()
+
+        self.after(1000, self.print_nowtime)
+
+
     
+    def print_nowtime(self):
+        # 协调世界时
+        utc_now_001 = datetime.utcnow().replace(tzinfo=timezone.utc)
+        # 北京时间
+        beijing_now_001 = utc_now_001.astimezone(SHA_TZ)
+        # print(beijing_now_001.strftime("%Y-%m-%d %H:%M:%S"))
+
+        self.tk_lbl_nowtime.config(text="{0}".format(beijing_now_001.strftime("%Y-%m-%d %H:%M:%S")))
+
+        self.after(1000, self.print_nowtime)
+
+        # t = threading.Timer(1.0, self.print_nowtime)
+        # t.start()
+ 
+        # t = threading.Thread(target=self.__show)
+        # t.start()
+
+
 
     @callback
     async def testcase_sendmsg(self, event=None):
@@ -307,6 +354,8 @@ class Frame_account(tkinter.LabelFrame):
         account_data = data.split("\n")
         for i in range(len(account_data)):
             item = ",".join(map(str, account_data[i].split(",")[0: 2]))
+            if item == "":
+                continue
             self.tk_listbox_account.insert(tkinter.END, item)
 
         self.p.tk_listbox_account = self.tk_listbox_account
@@ -318,18 +367,81 @@ class Frame_time(tkinter.LabelFrame):
     def __init__(self, parent):
         super().__init__(parent)
         self.__frame()
+        self.__tk_label_starttime()
 
     def __frame(self):
         self.place(x=(250+10)*1+25, y=120, width=250, height=520)
+
+    def __tk_label_starttime(self):
+        tk_label_starttime = tkinter.Label(self, text="Start Time\n(eg: 2022-11-11 12:00:00)", justify="left")
+        tk_label_starttime.place(x=0, y=0,)
+        self.tk_input_starttime = tkinter.Entry(self, )
+        self.tk_input_starttime.place(x=0, y=20*2, width=250-5)
+        self.tk_input_starttime.insert(0, "" + beijing_now.strftime("%Y-%m-%d %H:%M:%S"))
+
+        tk_label_intervalstime = tkinter.Label(self, text="Intervals Time\n(eg: 1s)", justify="left")
+        tk_label_intervalstime.place(x=0, y=20*4,)
+        self.tk_input_intervalstime = tkinter.Entry(self, )
+        self.tk_input_intervalstime.place(x=0, y=20*6, width=250-5)
+        self.tk_input_intervalstime.insert(0, "" + str(INTERVAL_TIME))
+
+        tk_label_endtime = tkinter.Label(self, text="End Time\n(default: 6h)", justify="left")
+        tk_label_endtime.place(x=0, y=20*8,)
+        self.tk_input_endstime = tkinter.Entry(self, )
+        self.tk_input_endstime.place(x=0, y=20*10, width=250-5)
+        delta = timedelta(hours=6)
+        self.tk_input_endstime.insert(0, "" + (beijing_now + delta).strftime("%Y-%m-%d %H:%M:%S"))
+
+
 
     
 class Frame_messageTemplate(tkinter.LabelFrame):
     def __init__(self, parent):
         super().__init__(parent)
         self.__frame()
+        self.__tk_template_text()
 
     def __frame(self):
         self.place(x=(250+10)*2+25, y=120, width=250, height=520)
+
+    def __tk_template_text(self):
+        self.CheckVarText = tkinter.IntVar(value=1)
+        self.CheckVarImage = tkinter.IntVar(value=0)
+
+
+        tk_label_template_text = tkinter.Label(self, text="Message Template", justify="left")
+        tk_label_template_text.place(x=0, y=0,)
+        
+        self.tk_checkbtn_text = tkinter.Checkbutton(self, variable=self.CheckVarText)
+        self.tk_checkbtn_text.place(x=0, y=24, width=20, height=20)
+
+        self.textTemplateText = tkinter.Text(self)
+        self.textTemplateText.place(x=25, y=24, width=250- 30-5, height=200*1.5)
+
+
+        self.tk_checkbtn_image = tkinter.Checkbutton(self, variable=self.CheckVarImage)
+        self.tk_checkbtn_image.place(x=0, y=24+200*1.5 + 5, width=20, height=20)
+
+        btn = tkinter.Button(self, text='select file(image, video)',
+            command=self.select_photo)
+        btn.place(x=25, y=24+200*1.5, width=250- 30-5, )
+        self.tk_file_path = tkinter.Label(self, text='path:', wraplength=250-5, anchor="w", justify="left")
+        self.tk_file_path.place(x=0, y=30+24+200*1.5, width=250-5, height=100)
+
+    
+    @callback
+    def select_photo(self):
+        filename = tkinter.filedialog.askopenfilename()
+        if filename != "":
+            self.tk_file_path.config(text="path:{0}".format(filename))
+        else:
+            self.tk_file_path.config("没有选择图片文件")
+
+    @callback
+    def CheckVarImage(self):
+        pass
+
+
 
 
 class Frame_Receiver(tkinter.LabelFrame):
@@ -347,11 +459,27 @@ class Frame_Receiver(tkinter.LabelFrame):
         tkinter.Label(self, text="Group/Channel:").place(x=0, y=0)
         self.textGroup = tkinter.Text(self)
         self.textGroup.place(x=0, y=24, width=250-5, height=200)
+
+        groupLinkData = readDataByName("groupLink")
+        groupLinkDatas = groupLinkData.split("\n")
+        for i in range(len(groupLinkDatas)):
+            suffix = "\n"
+            if i == len(groupLinkDatas) - 1:
+                suffix = ""
+            self.textGroup.insert(tkinter.END, groupLinkDatas[i] + suffix)
     
     def __tk_phone(self):
         tkinter.Label(self, text="Phone:").place(x=0, y=200+10+24)
-        self.textGroup = tkinter.Text(self)
-        self.textGroup.place(x=0, y=200+10+24*2, width=250-5, height=200)
+        self.textPhone = tkinter.Text(self)
+        self.textPhone.place(x=0, y=200+10+24*2, width=250-5, height=200)
+
+        phoneNumberData = readDataByName("phoneNumber")
+        phoneNumberDatas = phoneNumberData.split("\n")
+        for i in range(len(phoneNumberDatas)):
+            suffix = "\n"
+            if i == len(phoneNumberDatas) - 1:
+                suffix = ""
+            self.textPhone.insert(tkinter.END, phoneNumberDatas[i] + suffix)
 
     def __tk_button(self):
         btn = tkinter.Button(self, text="Save", command=self.on_btn_save)
@@ -359,7 +487,12 @@ class Frame_Receiver(tkinter.LabelFrame):
 
     @callback
     def on_btn_save(self):
-        pass
+        groupLinkData = self.textGroup.get("1.0", tkinter.END).strip()
+        saveDataByName("groupLink", groupLinkData)
+
+        phoneNumberData = self.textPhone.get("1.0", tkinter.END).strip()
+        saveDataByName("phoneNumber", phoneNumberData)
+
 
 
 class Frame_Button(tkinter.LabelFrame):
