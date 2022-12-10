@@ -7,6 +7,8 @@ Usage:
 
 from setuptools import setup
 
+import apscheduler
+
 APP = ['gui_main.py']
 DATA_FILES = ["./config_ini.ini"]
 OPTIONS = {

@@ -39,3 +39,10 @@ class FileUtil:
                 fw.write(text)
         except Exception as e:
             print(e)
+
+    def delete_file(self, file_path):
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+            print("delete success.")
+        else:
+            print("File does not exist.")

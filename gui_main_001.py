@@ -13,6 +13,8 @@ import tkinter.ttk
 import tkinter.filedialog
 import socks
 
+from core.PlaceholderEntry import PlaceholderEntry
+
 
 from telethon import TelegramClient, events, utils
 import telethon
@@ -24,6 +26,10 @@ from datetime import timezone
 import time
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.date import DateTrigger
+
+from telethon.tl.types import PeerUser, PeerChat, PeerChannel,UpdateNewChannelMessage
+from telethon.tl.types import User, Channel
 from telethon.tl.functions.messages import SendMessageRequest
 
 from apscheduler.schedulers import base
@@ -92,6 +98,10 @@ def callback(func):
 globalTgClientList = []
 
 class App(tkinter.Tk):
+    def setExit(self, value):
+        self.exitValue = value
+    def exit(self):
+        return self.exitValue
     """
     Our main GUI application; we subclass `tkinter.Tk`
     so the `self` instance can be the root widget.
@@ -109,10 +119,15 @@ class App(tkinter.Tk):
 
         # telegram 客户端
         self.tgClientList = []
-        # # message template
-        # self.messageTemplate
+        # time
+        self.CheckVarLoop = None
+        # self.CheckVarTime = None
+        # message template
+        self.CheckVarText = None
+        self.CheckVarImage = None
         # group/channle
         self.groupList = []
+        self.phoneList = []
 
         self.tk_frame_login = Frame_login(self)
         self.tk_listbox_account = None
@@ -148,7 +163,7 @@ class App(tkinter.Tk):
         self.after(1000, self.print_nowtime)
 
     def __tk_btn_http_proxy(self):
-        self.tk_btn_setting = tkinter.Button(self, text="setting", command=self.on_btn_setting)
+        self.tk_btn_setting = tkinter.Button(self, text="系统设置", command=self.on_btn_setting)
         self.tk_btn_setting.place(x=950, y=40)
 
     
@@ -173,7 +188,7 @@ class App(tkinter.Tk):
 
     @callback
     def on_btn_setting(self, event=None):
-        title = "Setting"
+        title = "系统设置"
         self.tk_modal_setting = tkinter.Toplevel()
         self.tk_modal_setting.title(title)
         root = self.tk_modal_setting
@@ -224,7 +239,7 @@ class App(tkinter.Tk):
         self.tk_input_proxy_port.grid(row=4, column=1)
         self.tk_input_proxy_port.insert(tkinter.END, config.get("proxy", "port"))
 
-        tkinter.Button(root, text="Commit", command=self.on_btn_commit).grid(row=5, column=0)
+        tkinter.Button(root, text="提交", command=self.on_btn_commit).grid(row=5, column=1)
         tkinter.mainloop()
 
     # Define our switch function
@@ -272,10 +287,40 @@ class App(tkinter.Tk):
             await tg.send_message(chat_id, messageValue)
 
 
+    async def login(self, tgClient, id, phone):
+        print("login...")
+        try:
+            await tgClient.connect()
+            auth = await tgClient.is_user_authorized()
+            if auth:
+                print(id, phone, "ok")
+                self.tgClientList.append(tgClient)
+                globalTgClientList.append(tgClient)
+
+                me = await tgClient.get_me()
+                isbot = me.bot
+
+                size = self.tk_listbox_account.size()
+                for i in range(0, size):
+                    item = self.tk_listbox_account.get(i)
+                    if id in item:
+                        self.tk_listbox_account.delete(i)
+                        self.tk_listbox_account.insert(i, "{0},{1},ok".format(item, "机器号" if isbot else "实体号"))
+                        self.tk_listbox_account.itemconfig(i, bg="#f00" if isbot else "#0f0")
+
+        except Exception as e:
+            print("login happen error,", e)
+            size = self.tk_listbox_account.size()
+            for i in range(0, size):
+                item = self.tk_listbox_account.get(i)
+                if id in item:
+                    self.tk_listbox_account.delete(i)
+                    self.tk_listbox_account.insert(i, item + ",fail")
     
     ## 获取本地数据,自动登录
     @callback
     async def auto_login(self, event=None):
+        print("auto_login")
         accountCSV = readDataByName("account")
         accounts = accountCSV.split("\n")
         for account in accounts:
@@ -284,22 +329,44 @@ class App(tkinter.Tk):
                 phone = account.split(",")[len(account.split(",")) - 1]
 
                 tgClient = TgClient(phone).getClient()
-                await tgClient.connect()
-                auth = await tgClient.is_user_authorized()
-                if auth:
-                    print(id, phone, "ok")
-                    self.tgClientList.append(tgClient)
-                    globalTgClientList.append(tgClient)
+                try:
 
-                    size = self.tk_listbox_account.size()
-                    for i in range(0, size):
-                        item = self.tk_listbox_account.get(i)
-                        if id in item:
-                            self.tk_listbox_account.delete(i)
-                            self.tk_listbox_account.insert(i, item + ",ok")
+                    await self.login(tgClient, id, phone)
+                    # asyncio.create_task(self.login(tgClient, id, phone))
+                    
+
+
+                    # tgClient.loop.run_until_complete(payload(tgClient))
+                    # for task in asyncio.Task.all_tasks(tgClient.loop):
+                    #     task.cancel()
+
+                    # task = tgClient.loop.create_task(self.login())
+                    # tgClient.loop.run_until_complete(task)
+
+                    # await tgClient.connect()
+                    # time.sleep(5)
+                    # print(222)
+                    # auth = await tgClient.is_user_authorized()
+                    # print(333)
+                    # if auth:
+                    #     print(id, phone, "ok")
+                    #     self.tgClientList.append(tgClient)
+                    #     globalTgClientList.append(tgClient)
+
+                    #     size = self.tk_listbox_account.size()
+                    #     for i in range(0, size):
+                    #         item = self.tk_listbox_account.get(i)
+                    #         if id in item:
+                    #             self.tk_listbox_account.delete(i)
+                    #             self.tk_listbox_account.insert(i, item + ",ok")
+                except Exception as e:
+                    print("e...", e)
+                    
         
     def __app(self):
-        self.title("Telegram Client")
+        config = configparser.ConfigParser()
+        config.read("config_ini.ini")
+        self.title(config.get("baseconfig", "title"))
         # 设置窗口大小、居中
         width = 1080
         height = 720
@@ -313,6 +380,7 @@ class App(tkinter.Tk):
 class Frame_login(tkinter.LabelFrame):
     def __init__(self, parent):
         super().__init__(parent)
+        self.parent = parent
         self.first_input_value = None
         self.me = None
         self.__frame()
@@ -322,31 +390,72 @@ class Frame_login(tkinter.LabelFrame):
         self.code = None
         self.twoSteps = False
         self.tgClient = None
-        self.tk_btn_add_account()
+        self.tk_input_remark_account = self.__tk_input_remark_account()
+        self.tk_btn_add_account = self.__tk_btn_add_account()
+        
 
+    def __tk_input_remark_account(self):
+        # input = tkinter.Entry(self, )
+        # input.insert(tkinter.END, "请输入账号备注")
+        # input.configure(state=tkinter.DISABLED)
+        # def focus_in(self):
+        #     input.configure(state=tkinter.NORMAL)
+        #     input.delete(0, tkinter.END)
+        # def focus_out(self):
+        #     if input.get().strip() != "":
+        #         input.insert(tkinter.END, "请输入账号备注")
+        #         input.configure(state=tkinter.DISABLED)
+        # input.bind("<FocusIn>", focus_in)
+        # input.bind("<FocusOut>", focus_out)
 
-    def tk_btn_add_account(self):
+        input = PlaceholderEntry(self, "请输入账号备注")
+        input.configure(state=tkinter.DISABLED)
+        input.grid(row=0, column=4)
+        return input
+
+    def __tk_btn_add_account(self):
         btn = tkinter.Button(self, text="...", command=self.add_account)
-        btn.configure(text="Add account")
-        btn.grid(row=0, column=3)
+        btn.configure(text="添加账号")
+        btn.configure(state=tkinter.DISABLED)
+        btn.grid(row=0, column=5)
         return btn
 
     @callback
     def add_account(self, event=None):
-        print("添加账号", self.me)
+        # print("添加账号", self.me)
+
+        if self.me is None:
+            tkinter.messagebox.showerror(title="错误", message="账号未登录", )
+            return
+
         account = self.me
         username = utils.get_display_name(self.me)
         phone = self.me.phone
-        print(phone, self.first_input_value, account)
+        # print(phone, self.first_input_value, account)
 
         # bot
-        if phone is None:
+        data = ""
+        isbot = phone is None
+        if isbot:
             data = "{0},{1},{2},{3}\n".format(account.id, "{0}{1}".format(account.first_name, account.last_name), account.username, self.first_input_value)
-            appendDataByName("account", data)
         else:
             data = "{0},{1},{2},{3}\n".format(account.id, "{0}{1}".format(account.first_name, account.last_name), account.username, account.phone)
-            appendDataByName("account", data)
         # self.accountListbox.insert(tkinter.END, "{0},{1}".format(str(account.id), username))
+        appendDataByName("account", data)
+        item = ",".join(map(str, data.split(",")[0: 2]))
+        self.parent.tk_listbox_account.insert(tkinter.END, "{0},{1},ok".format(item, "机器号" if isbot else "实体号"))
+        self.parent.tk_listbox_account.itemconfig(tkinter.END, bg="#f00" if isbot else "#0f0")
+        # self.parent.tk_listbox_account.insert(tkinter.END, item+",ok")
+
+        # todo: 将连接句柄,放入全局连接句柄管理
+        globalTgClientList.append(self.tgClient)
+        self.tgClient = None
+        self.tk_label_account.config(text="Sign in (phont/token):")
+        self.tk_input_account.configure(state=tkinter.NORMAL)
+        self.tk_input_account.delete(0, tkinter.END)
+        self.tk_button_account.configure(text='Sign in')
+
+
 
     
     def __frame(self):
@@ -429,6 +538,9 @@ class Frame_login(tkinter.LabelFrame):
         self.tk_label_account.configure(text='Signed in')
         self.tk_input_account.configure(state=tkinter.NORMAL)
         self.tk_input_account.delete(0, tkinter.END)
+
+        self.tk_btn_add_account.configure(state=tkinter.NORMAL)
+
         try:
             self.tk_input_account.insert(tkinter.INSERT, utils.get_display_name(me))
             # self.account_data.append(utils.get_display_name(me))
@@ -442,7 +554,7 @@ class Frame_login(tkinter.LabelFrame):
 class Frame_account(tkinter.LabelFrame):
     def __init__(self, parent):
         super().__init__(parent)
-        self.p = parent
+        self.parent = parent
         self.__frame()
         self.__tk_listbox_account()
 
@@ -461,15 +573,72 @@ class Frame_account(tkinter.LabelFrame):
                 continue
             self.tk_listbox_account.insert(tkinter.END, item)
 
-        self.p.tk_listbox_account = self.tk_listbox_account
+        self.parent.tk_listbox_account = self.tk_listbox_account
 
 
-        btn = tkinter.Button(self, text="remove", command=self.on_btn_remove_account)
+        btn = tkinter.Button(self, text="移除账号", command=self.on_btn_remove_account)
         # btn.configure(text="")
         btn.place(x=0, y=460)
 
-    def on_btn_remove_account(self):
-        pass
+    @callback
+    async def on_btn_remove_account(self):
+        # 获取选中的账号
+        select = self.parent.tk_listbox_account.curselection()
+        print(select)
+        if len(select) == 0:
+            return
+        data = readDataByName("account")
+        accountData = data.split("\n")
+
+        start = select[0]
+        end = select[len(select) - 1]
+        print(start, end)
+        print("accountData...", accountData)
+        account_item = accountData[start: end + 1]
+        # print("account_item...", account_item)
+        del accountData[start: end + 1]
+        self.tk_listbox_account.delete(start, end) # 删除listbox组件的数据
+        
+        print("accountData", accountData)
+
+        d = ""
+        for account in accountData:
+            if account != "":
+                d += ''.join(account + "\n")
+        print("d...", d)
+        
+        # 设置csv数据
+        saveDataByName("account", d)
+        
+        print(account_item)
+        for a in account_item:
+            print(a.split(",")[len(a.split(",")) - 1])
+            file_path = "{0}/sessions/{1}.session".format(folder, a.split(",")[len(a.split(",")) - 1])
+            print("file_path...", file_path)
+            # 删除session文件
+            fileUtil.delete_file(file_path)
+
+        # todo: 从全家账号句柄中,移除选中的账号句柄
+        client_index_list = []
+        for a in account_item:
+            for i in range(len(globalTgClientList)):
+                if globalTgClientList[i] == "":
+                    continue
+                me = await globalTgClientList[i].get_me()
+                # print(a.split(",")[0], me)
+                if a.split(",")[0] == str(me.id):
+                    client_index_list.append(i)
+                    globalTgClientList[i] = ""
+
+        print(client_index_list)
+        while "" in globalTgClientList:
+            globalTgClientList.remove("")
+        print(len(globalTgClientList))
+        
+
+
+
+
 
 
 
@@ -484,24 +653,69 @@ class Frame_time(tkinter.LabelFrame):
         self.place(x=(250+10)*1+25, y=120, width=250, height=520)
 
     def __tk_label_starttime(self):
-        tk_label_starttime = tkinter.Label(self, text="Start Time\n(eg: 2022-11-11 12:00:00)", justify="left")
-        tk_label_starttime.place(x=0, y=0,)
+        self.CheckVarLoop = tkinter.IntVar(value=0)
+        # self.CheckVarTime = tkinter.IntVar(value=0)
+
+        self.parent.CheckVarLoop = self.CheckVarLoop
+        # self.parent.CheckVarTime = self.CheckVarTime
+
+        tkinter.Label(self, text="1、按 时间单位:\n循环时刻(eg: 1秒)", justify="left").place(x=0, y=0,)
+       
+
+        self.tk_checkbtn_text = tkinter.Radiobutton(self, value=0, variable=self.CheckVarLoop)
+        self.tk_checkbtn_text.place(x=0, y=20*2, width=20, height=20)
+       
+        tk_label_starttime = tkinter.Label(self, text="开始时间\n(默认: 2022-11-11 12:00:00)", justify="left")
+        tk_label_starttime.place(x=0, y=20*3,)
         self.parent.tk_input_starttime = tkinter.Entry(self, )
-        self.parent.tk_input_starttime.place(x=0, y=20*2, width=250-5)
+        self.parent.tk_input_starttime.place(x=0, y=20*5, width=250-5)
         self.parent.tk_input_starttime.insert(0, "" + beijing_now.strftime("%Y-%m-%d %H:%M:%S"))
 
-        tk_label_intervalstime = tkinter.Label(self, text="Intervals Time\n(eg: 1s)", justify="left")
-        tk_label_intervalstime.place(x=0, y=20*4,)
-        self.parent.tk_input_intervalstime = tkinter.Entry(self, )
-        self.parent.tk_input_intervalstime.place(x=0, y=20*6, width=250-5)
-        self.parent.tk_input_intervalstime.insert(0, "" + str(INTERVAL_TIME))
+        # 秒
+        tkinter.Label(self, text="秒", justify="right").place(x=200, y=20*6 + 28 -18)
+        self.parent.tk_input_intervals_seconds = tkinter.Entry(self, )
+        self.parent.tk_input_intervals_seconds.place(x=0, y=20*6 + 28 -18, width=250-5 - 50)
+        self.parent.tk_input_intervals_seconds.insert(0, "")
 
-        tk_label_endtime = tkinter.Label(self, text="End Time\n(default: 6h)", justify="left")
-        tk_label_endtime.place(x=0, y=20*8,)
+        # 分
+        tkinter.Label(self, text="分", justify="right").place(x=200, y=20*6 + 28*2 -18)
+        self.parent.tk_input_intervals_minutes = tkinter.Entry(self, )
+        self.parent.tk_input_intervals_minutes.place(x=0, y=20*6 + 28*2 -18, width=250-5 - 50)
+        self.parent.tk_input_intervals_minutes.insert(0, "")
+
+        # 小时
+        tkinter.Label(self, text="小时", justify="right").place(x=200, y=20*6 + 28*3 -18)
+        self.parent.tk_input_intervals_hours = tkinter.Entry(self, )
+        self.parent.tk_input_intervals_hours.place(x=0, y=20*6 + 28*3 -18, width=250-5 - 50)
+        self.parent.tk_input_intervals_hours.insert(0, "")
+
+        # 天
+        tkinter.Label(self, text="天", justify="right").place(x=200, y=20*6 + 28*4 -18)
+        self.parent.tk_input_intervals_days = tkinter.Entry(self, )
+        self.parent.tk_input_intervals_days.place(x=0, y=20*6 + 28*4 -18, width=250-5 - 50)
+        self.parent.tk_input_intervals_days.insert(0, "")
+
+
+        tk_label_endtime = tkinter.Label(self, text="结束时间\n(默认: 30天)", justify="left")
+        tk_label_endtime.place(x=0, y=20*6 + 28*5 -18,)
         self.parent.tk_input_endstime = tkinter.Entry(self, )
-        self.parent.tk_input_endstime.place(x=0, y=20*10, width=250-5)
-        delta = timedelta(hours=6)
+        self.parent.tk_input_endstime.place(x=0, y=20*8 + 28*5 -18, width=250-5)
+        # delta = timedelta(hours=6)
+        delta = timedelta(days=30)
         self.parent.tk_input_endstime.insert(0, "" + (beijing_now + delta).strftime("%Y-%m-%d %H:%M:%S"))
+
+
+
+        self.tk_checkbtn_time = tkinter.Radiobutton(self, value=1, variable=self.CheckVarLoop)
+        self.tk_checkbtn_time.place(x=0, y=20*9 + 160, width=20, height=20)
+
+        # 时刻
+        tkinter.Label(self, text="2、按 固定时间:", justify="right").place(x=0, y=20*9 + 180)
+        self.parent.tk_input_intervals_time = tkinter.Entry(self, )
+        self.parent.tk_input_intervals_time.place(x=0, y=20*10 + 180, width=250-5 - 50)
+        self.parent.tk_input_intervals_time.insert(0, "")
+        # self.parent.tk_input_intervals_time.insert(0, "" + beijing_now.strftime("%Y-%m-%d %H:%M:%S"))
+
 
 
 
@@ -510,18 +724,32 @@ class Frame_messageTemplate(tkinter.LabelFrame):
     def __init__(self, parent):
         super().__init__(parent)
         self.parent = parent
+        
+        # 读取配置文件 config.ini
+        config = configparser.ConfigParser()
+        config.read("config_ini.ini")
+        self.conf = config
+        
         self.__frame()
         self.__tk_template_text()
+        self.__tk_button()
 
     def __frame(self):
         self.place(x=(250+10)*2+25, y=120, width=250, height=520)
 
     def __tk_template_text(self):
-        self.CheckVarText = tkinter.IntVar(value=1)
-        self.CheckVarImage = tkinter.IntVar(value=0)
+        check_content = self.conf.get("message", "check_content")
+        check_file = self.conf.get("message", "check_file")
+        content = self.conf.get("message", "content")
+        file_path = self.conf.get("message", "file_path")
 
+        self.CheckVarText = tkinter.IntVar(value=1 if check_content == "1" else 0)
+        self.CheckVarImage = tkinter.IntVar(value=1 if check_file == "1" else 0)
 
-        tk_label_template_text = tkinter.Label(self, text="Message Template", justify="left")
+        self.parent.CheckVarText = self.CheckVarText
+        self.parent.CheckVarImage = self.CheckVarImage
+
+        tk_label_template_text = tkinter.Label(self, text="消息模板", justify="left")
         tk_label_template_text.place(x=0, y=0,)
         
         self.tk_checkbtn_text = tkinter.Checkbutton(self, variable=self.CheckVarText)
@@ -529,29 +757,49 @@ class Frame_messageTemplate(tkinter.LabelFrame):
 
         self.parent.tk_text_template_text = tkinter.Text(self)
         self.parent.tk_text_template_text.place(x=25, y=24, width=250- 30-5, height=200*1.5)
+        self.parent.tk_text_template_text.insert(tkinter.END, "" + content)
 
 
         self.tk_checkbtn_image = tkinter.Checkbutton(self, variable=self.CheckVarImage)
         self.tk_checkbtn_image.place(x=0, y=24+200*1.5 + 5, width=20, height=20)
 
-        btn = tkinter.Button(self, text='select file(image, video)',
+        btn = tkinter.Button(self, text='选择文件(图片、视频或者其他文件)',
             command=self.select_photo)
         btn.place(x=25, y=24+200*1.5, width=250- 30-5, )
-        self.tk_file_path = tkinter.Label(self, text='path:', wraplength=250-5, anchor="w", justify="left")
-        self.tk_file_path.place(x=0, y=30+24+200*1.5, width=250-5, height=100)
+        tkinter.Label(self, text='路径:', anchor="w", justify="left").place(x=0, y=30+24+200*1.5)
+        self.parent.tk_label_file_path = tkinter.Label(self, text='', wraplength=250-5, anchor="w", justify="left")
+        self.parent.tk_label_file_path.place(x=0, y=30+24+200*1.5 + 28, width=250-5, height=100)
+        self.parent.tk_label_file_path.config(text="" + file_path)
+
+
+
+    def __tk_button(self):
+        btn = tkinter.Button(self, text="保存", command=self.on_btn_save)
+        btn.place(x=0, y=200*2+10+24*3, )
 
     
     @callback
     def select_photo(self):
         filename = tkinter.filedialog.askopenfilename()
         if filename != "":
-            self.tk_file_path.config(text="path:{0}".format(filename))
+            self.parent.tk_label_file_path.config(text="{0}".format(filename))
         else:
-            self.tk_file_path.config("没有选择图片文件")
+            self.parent.tk_label_file_path.config(text="没有选择图片文件")
 
     @callback
-    def CheckVarImage(self):
-        pass
+    def on_btn_save(self):
+        check_content = str(self.parent.CheckVarText.get())
+        check_file = str(self.parent.CheckVarImage.get())
+        messageValue = self.parent.tk_text_template_text.get("1.0", tkinter.END).strip()
+        image_path = self.parent.tk_label_file_path.cget("text")
+        
+        self.conf.set("message", "check_content", check_content)
+        self.conf.set("message", "check_file", check_file)
+        self.conf.set("message", "content", messageValue)
+        self.conf.set("message", "file_path", image_path)
+        with open("config_ini.ini", "w") as configFile:
+            self.conf.write(configFile)
+
 
 
 
@@ -560,6 +808,7 @@ class Frame_Receiver(tkinter.LabelFrame):
     def __init__(self, parent):
         super().__init__(parent)
         self.groupList = parent.groupList
+        self.phoneList = parent.phoneList
         self.__frame()
         self.__tk_group()
         self.__tk_phone()
@@ -569,7 +818,7 @@ class Frame_Receiver(tkinter.LabelFrame):
         self.place(x=(250+10)*3+25, y=120, width=250, height=520)
 
     def __tk_group(self):
-        tkinter.Label(self, text="Group/Channel:").place(x=0, y=0)
+        tkinter.Label(self, text="群组/频道 分享链接:").place(x=0, y=0)
         self.textGroup = tkinter.Text(self)
         self.textGroup.place(x=0, y=24, width=250-5, height=200)
 
@@ -583,7 +832,7 @@ class Frame_Receiver(tkinter.LabelFrame):
             self.groupList.append(groupLinkDatas[i])
 
     def __tk_phone(self):
-        tkinter.Label(self, text="Phone:").place(x=0, y=200+10+24)
+        tkinter.Label(self, text="手机号(+区号):").place(x=0, y=200+10+24)
         self.textPhone = tkinter.Text(self)
         self.textPhone.place(x=0, y=200+10+24*2, width=250-5, height=200)
 
@@ -594,9 +843,10 @@ class Frame_Receiver(tkinter.LabelFrame):
             if i == len(phoneNumberDatas) - 1:
                 suffix = ""
             self.textPhone.insert(tkinter.END, phoneNumberDatas[i] + suffix)
+            self.phoneList.append(phoneNumberDatas[i])
 
     def __tk_button(self):
-        btn = tkinter.Button(self, text="Save", command=self.on_btn_save)
+        btn = tkinter.Button(self, text="保存", command=self.on_btn_save)
         btn.place(x=0, y=200*2+10+24*3, )
 
     @callback
@@ -634,8 +884,8 @@ class Frame_Button(tkinter.LabelFrame):
         )
         self.scheduleTask.grid(row=1, column=4)
 
-        self.tk_label_send_status = tkinter.Label(self, text="")
-        self.tk_label_send_status.grid(row=1, column=3)
+        self.tk_label_send_status = tkinter.Label(self, text="立即发送状态")
+        self.tk_label_send_status.place(x=10, y=30)
 
 
 
@@ -655,6 +905,27 @@ class Frame_Button(tkinter.LabelFrame):
         btn_stop_send.grid(row=0, column=2)
 
 
+    def check_send_msg(self):
+        messageValue = self.parent.tk_text_template_text.get("1.0", tkinter.END).strip()
+        image_path = self.parent.tk_label_file_path.cget("text")
+
+        if self.parent.CheckVarText.get() == 0 and self.parent.CheckVarImage.get() == 0:
+            tkinter.messagebox.showerror(title="错误", message="消息模板不能为空", )
+            return (False, messageValue, image_path)
+        
+        # 如果消息是空的,不允许发送
+        if self.parent.CheckVarText.get() == 1 and messageValue == "":
+            tkinter.messagebox.showerror(title="错误", message="文本内容不能为空", )
+            return (False, messageValue, image_path)
+
+        if self.parent.CheckVarImage.get() == 1 and image_path == "":
+            tkinter.messagebox.showerror(title="错误", message="文件地址不能为空", )
+            return (False, messageValue, image_path)
+        
+        return (True, messageValue, image_path)
+
+
+
     async def send_msg(self):
         # print(len(globalTgClientList))
         # size = self.parent.tk_listbox_account.size()
@@ -663,38 +934,106 @@ class Frame_Button(tkinter.LabelFrame):
 
         print("准备发送消息...")
 
-        messageValue = self.parent.tk_text_template_text.get("1.0", tkinter.END).strip()
-        
-        # 如果消息是空的,不允许发送
-        if messageValue == "":
+        result, messageValue, image_path = self.check_send_msg()
+        if not result:
             return
 
         print("发送消息...")
         # self.parent.tk_listbox_account.delete(0, size - 1)
+
+
+        # 获取一个非bot,拿到chat_id
+        entity_list = []
         for tg in globalTgClientList:
-            for rec in self.parent.groupList:
+            me = await tg.get_me()
+            if not me.bot:
+                for rec in self.parent.groupList:
+                    print("groupList rec", rec)
+                    try:
+                        entity = await tg.get_entity(rec)
+                        entity_list.append(entity)
+                    except Exception as e:
+                        print(e)
+                for rec in self.parent.phoneList:
+                    print("phoneList rec", rec)
+                    try:
+                        entity = await tg.get_entity(rec)
+                        entity_list.append(entity)
+                    except Exception as e:
+                        print(e)
+                break
+        
+
+
+        if len(entity_list) == 0:
+            tkinter.messagebox.showerror(title="错误", message="必须添加一个非机器人账号", )
+            return
+
+        for tg in globalTgClientList:
+            for entity in entity_list:
                 try:
-                    chat_id = (await tg.get_entity(rec)).id
-                    await tg.send_message(chat_id, messageValue)
+                    # print(entity)
+                    # 881890232
+                    # 1815520607
+                    # chat_id = (await tg.get_entity(rec)).id
+                    # chat_id = 881890232
+                    # chat_id = 1815520607
+                    chat_id = entity.id
+                    print(chat_id, )
+
+                    if self.parent.CheckVarText.get() == 1:
+                        me = await tg.get_me()
+                        if not me.bot:
+                            print("真人,发送人/群/频道", messageValue)
+                            # 真人,发送人/群/频道
+                            await tg.send_message(chat_id, messageValue)
+                        else:
+                            if type(entity) == User:
+                                print("bot,发送人", messageValue)
+                                # bot,发送人
+                                # await tg(SendMessageRequest(PeerUser(chat_id), messageValue))
+                                raise RuntimeError("bot无法发送人", messageValue)
+                            else:
+                                if entity.participants_count != None:
+                                    print("bot,发送群", messageValue)
+                                    # bot,发送群
+                                    await tg(SendMessageRequest(PeerChat(chat_id), messageValue))
+                                else:
+                                    print("bot,发送频道", messageValue)
+                                    # bot,发送频道
+                                    await tg(SendMessageRequest(PeerChannel(chat_id), messageValue))
+                        
+                        
+
+
+                    if self.parent.CheckVarImage.get() == 1:
+                        await tg.send_file(chat_id, image_path)
+
                     self.schedulerTaskSuccessCount += 1
-                    if not self.isScheduleTask:
-                        self.tk_label_send_status.config(text="发送成功", bg="#0f0")
+                    if not self.scheduler.running:
+                        pass
+                        # self.tk_label_send_status.config(text="发送成功", bg="#0f0")
                     else:
                         self.tk_label_send_status.config(text="")
                 except Exception as e:
                     print("err", e)
                     self.schedulerTaskFailedCount += 1
-                    if not self.isScheduleTask:
-                        self.tk_label_send_status.config(text="发送失败", bg="#f00") 
+                    if not self.scheduler.running:
+                        pass
+                        # self.tk_label_send_status.config(text="发送失败", bg="#f00") 
                     else:
                         self.tk_label_send_status.config(text="")
+
+        if not self.scheduler.running:
+            self.tk_label_send_status.config(text="执行完成,成功{0}次,失败{1}次".format(self.schedulerTaskSuccessCount, self.schedulerTaskFailedCount))
+        
 
 
     def schedulerListener(self, event):
         print("schedulerListener...", event)
         # get_jobs = self.scheduler.get_jobs()
-        # print_jobs = self.scheduler.print_jobs()
         # print(get_jobs)
+        # print_jobs = self.scheduler.print_jobs()
         # print(print_jobs)
 
         # EVENT_JOB_REMOVED: 定时任务自动停止时             1024
@@ -718,27 +1057,95 @@ class Frame_Button(tkinter.LabelFrame):
 
     @callback
     def on_schedule_send(self):
+        result, _, _ = self.check_send_msg()
+        if not result:
+            return
+
         if self.scheduler.running:
             return
 
+        self.tk_label_send_status.config(text="")
+
+        isLoop = self.parent.CheckVarLoop.get() == 0
+
         startTimeValue = self.parent.tk_input_starttime.get().strip()
-        loopTimeValue = self.parent.tk_input_intervalstime.get().strip()
+        secondsValue = self.parent.tk_input_intervals_seconds.get().strip()
+        minuteValue=self.parent.tk_input_intervals_minutes.get().strip()
+        hoursValue = self.parent.tk_input_intervals_hours.get().strip()
+        daysValue = self.parent.tk_input_intervals_days.get().strip()
+        timeValue = self.parent.tk_input_intervals_time.get().strip()
         endTimeValue = self.parent.tk_input_endstime.get().strip()
         self.scheduler.remove_all_jobs()
         self.scheduler.remove_listener(self.schedulerListener)
-        self.scheduler.add_job(
-            self.send_msg, 
-            trigger='interval', 
-            seconds=int(loopTimeValue), 
-            start_date=startTimeValue,
-            end_date=endTimeValue,
-        )
+        if isLoop:
+            if secondsValue != "":
+                self.scheduler.add_job(
+                    self.send_msg, 
+                    trigger='interval', 
+                    seconds=int(secondsValue),
+                    start_date=startTimeValue,
+                    end_date=endTimeValue,
+                )
+            elif minuteValue != "":
+                self.scheduler.add_job(
+                    self.send_msg, 
+                    trigger='interval', 
+                    minutes=int(minuteValue),
+                    start_date=startTimeValue,
+                    end_date=endTimeValue,
+                )
+            elif hoursValue != "":
+                self.scheduler.add_job(
+                    self.send_msg, 
+                    trigger='interval', 
+                    hours=int(hoursValue),
+                    start_date=startTimeValue,
+                    end_date=endTimeValue,
+                )
+            elif daysValue != "":
+                self.scheduler.add_job(
+                    self.send_msg, 
+                    trigger='interval', 
+                    days=int(daysValue),
+                    start_date=startTimeValue,
+                    end_date=endTimeValue,
+                )
+            else:
+                tkinter.messagebox.showerror(title="错误", message="循环时刻不能都为空", )
+                return
+        else: 
+            if timeValue != "":
+                print("+", timeValue, "=")
+                trigger = DateTrigger(
+                    # run_date=datetime.now() + timedelta(seconds=100),
+                    run_date=timeValue,
+                    # timezone=timezone('Asia/Shanghai')
+                )
+                self.scheduler.add_job(
+                    self.send_msg, 
+                    # "date",
+                    trigger=trigger, 
+                    # run_date=datetime.strptime(timeValue, "%Y-%m-%d %H:%M:%S"),
+                    # run_date=datetime.now() + timedelta(seconds=100),
+                    # timezone=timezone('Asia/Shanghai')
+                    # start_date=startTimeValue,
+                    # end_date=endTimeValue,
+                )
+            else:
+                tkinter.messagebox.showerror(title="错误", message="固定时间不能为空", )
+                return
+        
         self.scheduler.start()
         self.scheduler.add_listener(self.schedulerListener, )
             # mask=base.EVENT_JOB_REMOVED | base.EVENT_SCHEDULER_SHUTDOWN) # 任务监听
 
+        print_jobs = self.scheduler.print_jobs()
+        print(print_jobs)
+
         self.isScheduleTask = True
         self.schedulerTaskCount = 0
+        self.schedulerTaskSuccessCount = 0
+        self.schedulerTaskFailedCount = 0
         self.scheduleTask.config(
             text='定时任务:'+ ("运行中, 已执行{0}次,成功{1}次,失败{2}次".format(self.schedulerTaskCount, self.schedulerTaskSuccessCount, self.schedulerTaskFailedCount) if self.isScheduleTask else "未运行"),
             bg='red'
@@ -802,11 +1209,27 @@ class TgClient():
         
 async def main(interval=0.05):
     app = App()
+    app.setExit(False)
+
+
+    def dd():
+        result = tkinter.messagebox.askquestion(title="提示", message="确定退出?", icon="warning")
+        if result != "yes":
+            return
+
+        print("dd")
+        app.destroy()
+        app.setExit(True)
+        pass
+
+    app.protocol('WM_DELETE_WINDOW', dd)
+
+
     try:
         while True:
             app.update()
-            # if app.exit():
-            #     sys.exit(0)
+            if app.exit():
+                sys.exit(0)
             await asyncio.sleep(interval)
     except KeyboardInterrupt:
         pass

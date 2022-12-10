@@ -1,3 +1,9 @@
+
+tkinter 打包成exe可执行文件
+pyinstaller -F -w gui_main_001.py
+
+
+
 ```shell
 pip3 install py2app
 
