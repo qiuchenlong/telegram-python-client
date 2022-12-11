@@ -7,8 +7,8 @@ Usage:
 
 from setuptools import setup
 
-APP = ['gui_main.py']
-DATA_FILES = ["./config_ini.ini"]
+APP = ['gui_main_001.py']
+DATA_FILES = ["./config_ini.ini", "./datas", "./sessions", "./on.png", "./off.png"]
 OPTIONS = {
     'packages': ['pytz', 'tzdata', 'apscheduler']
 }

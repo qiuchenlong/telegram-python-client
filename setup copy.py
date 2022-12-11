@@ -7,10 +7,8 @@ Usage:
 
 from setuptools import setup
 
-import apscheduler
-
-APP = ['gui_main.py']
-DATA_FILES = ["./config_ini.ini"]
+APP = ['gui_main_001.py']
+DATA_FILES = ["./config_ini.ini", "./datas", "./sessions"]
 OPTIONS = {
     'packages': ['pytz', 'tzdata', 'apscheduler']
 }

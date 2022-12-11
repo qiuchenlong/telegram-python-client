@@ -66,6 +66,7 @@ def readDataByName(name):
     return fileUtil.read_file_002("{0}{1}".format(dataPath, "/"+name+".csv"))
 
 
+loop = asyncio.get_event_loop()
 
 ## =================== time ===================
 # 间隔时间(秒)
@@ -195,7 +196,7 @@ class App(tkinter.Tk):
 
         # 读取配置文件 config.ini
         config = configparser.ConfigParser()
-        config.read("config_ini.ini")
+        config.read("config_ini.ini", encoding="utf-8")
         self.conf = config
 
         tkinter.Label(root, text="名称").grid(row=0, column=0)
@@ -239,6 +240,8 @@ class App(tkinter.Tk):
         self.tk_input_proxy_port.grid(row=4, column=1)
         self.tk_input_proxy_port.insert(tkinter.END, config.get("proxy", "port"))
 
+        tkinter.Label(root, text="注:设置代理,需重启软件", fg="#f00").grid(row=5, column=0)
+
         tkinter.Button(root, text="提交", command=self.on_btn_commit).grid(row=5, column=1)
         tkinter.mainloop()
 
@@ -269,7 +272,7 @@ class App(tkinter.Tk):
         self.conf.set("proxy", "mode", self.tk_input_proxy_mode.get().strip())
         self.conf.set("proxy", "host", self.tk_input_proxy_host.get().strip())
         self.conf.set("proxy", "port", self.tk_input_proxy_port.get().strip())
-        with open("config_ini.ini", "w") as configFile:
+        with open("config_ini.ini", "w", encoding="utf-8") as configFile:
             self.conf.write(configFile)
 
         app_title_vaue = self.tk_input_setting.get().strip()
@@ -307,9 +310,12 @@ class App(tkinter.Tk):
                         self.tk_listbox_account.delete(i)
                         self.tk_listbox_account.insert(i, "{0},{1},ok".format(item, "机器号" if isbot else "实体号"))
                         self.tk_listbox_account.itemconfig(i, bg="#f00" if isbot else "#0f0")
-
+        
+        except ConnectionError as e:
+            tkinter.messagebox.showerror(title="错误", message="无法连接到telegram服务,请检查网络", )
         except Exception as e:
             print("login happen error,", e)
+
             size = self.tk_listbox_account.size()
             for i in range(0, size):
                 item = self.tk_listbox_account.get(i)
@@ -331,9 +337,9 @@ class App(tkinter.Tk):
                 tgClient = TgClient(phone).getClient()
                 try:
 
-                    await self.login(tgClient, id, phone)
-                    # asyncio.create_task(self.login(tgClient, id, phone))
-                    
+
+                    # await self.login(tgClient, id, phone)
+                    asyncio.create_task(self.login(tgClient, id, phone))
 
 
                     # tgClient.loop.run_until_complete(payload(tgClient))
@@ -365,7 +371,8 @@ class App(tkinter.Tk):
         
     def __app(self):
         config = configparser.ConfigParser()
-        config.read("config_ini.ini")
+        # 这里不能读中文,macOS会报错
+        config.read("config_ini.ini", encoding="utf-8")
         self.title(config.get("baseconfig", "title"))
         # 设置窗口大小、居中
         width = 1080
@@ -409,6 +416,7 @@ class Frame_login(tkinter.LabelFrame):
         # input.bind("<FocusOut>", focus_out)
 
         input = PlaceholderEntry(self, "请输入账号备注")
+        input.bind('<Return>', self.add_account)
         input.configure(state=tkinter.DISABLED)
         input.grid(row=0, column=4)
         return input
@@ -433,16 +441,32 @@ class Frame_login(tkinter.LabelFrame):
         phone = self.me.phone
         # print(phone, self.first_input_value, account)
 
+        # 备注
+        remark_account = self.tk_input_remark_account.get().strip()
+
+
         # bot
         data = ""
         isbot = phone is None
         if isbot:
-            data = "{0},{1},{2},{3}\n".format(account.id, "{0}{1}".format(account.first_name, account.last_name), account.username, self.first_input_value)
+            data = "{0},{1},{2},{3},{4}\n".format(
+                account.id, 
+                remark_account, 
+                "{0}{1}".format("" if account.first_name is None else account.first_name, "" if account.last_name is None else account.last_name), 
+                "" if account.username is None else account.username, 
+                self.first_input_value
+            )
         else:
-            data = "{0},{1},{2},{3}\n".format(account.id, "{0}{1}".format(account.first_name, account.last_name), account.username, account.phone)
+            data = "{0},{1},{2},{3},{4}\n".format(
+                account.id, 
+                remark_account, 
+                "{0}{1}".format("" if account.first_name is None else account.first_name, "" if account.last_name is None else account.last_name), 
+                "" if account.username is None else account.username, 
+                account.phone
+            )
         # self.accountListbox.insert(tkinter.END, "{0},{1}".format(str(account.id), username))
         appendDataByName("account", data)
-        item = ",".join(map(str, data.split(",")[0: 2]))
+        item = ",".join(map(str, data.split(",")[0: 3]))
         self.parent.tk_listbox_account.insert(tkinter.END, "{0},{1},ok".format(item, "机器号" if isbot else "实体号"))
         self.parent.tk_listbox_account.itemconfig(tkinter.END, bg="#f00" if isbot else "#0f0")
         # self.parent.tk_listbox_account.insert(tkinter.END, item+",ok")
@@ -450,10 +474,15 @@ class Frame_login(tkinter.LabelFrame):
         # todo: 将连接句柄,放入全局连接句柄管理
         globalTgClientList.append(self.tgClient)
         self.tgClient = None
-        self.tk_label_account.config(text="Sign in (phont/token):")
+        self.tk_label_account.config(text="登录 (手机号/token):")
         self.tk_input_account.configure(state=tkinter.NORMAL)
         self.tk_input_account.delete(0, tkinter.END)
-        self.tk_button_account.configure(text='Sign in')
+        self.tk_button_account.configure(text='登录')
+
+        self.tk_input_remark_account.delete(0, tkinter.END)
+        self.tk_input_remark_account.insert(tkinter.END, "请输入账号备注")
+        self.tk_input_remark_account.configure(state=tkinter.DISABLED)
+        self.tk_btn_add_account.configure(state=tkinter.DISABLED)
 
 
 
@@ -462,8 +491,8 @@ class Frame_login(tkinter.LabelFrame):
         self.place(x=200, y=20, width=680, height=60)
 
     def __tk_label_account(self):
-        lbl = tkinter.Label(self, text="Loading...")
-        lbl.configure(text="Sign in (phont/token):")
+        lbl = tkinter.Label(self, text="加载中...")
+        lbl.configure(text="登录 (手机号/token):")
         # lbl.place(x=10, y=10, width="auto", height=32)
         lbl.grid(row=0, column=0)
         return lbl
@@ -477,24 +506,43 @@ class Frame_login(tkinter.LabelFrame):
 
     def __tk_button_account(self):
         btn = tkinter.Button(self, text="...", command=self.sign_in)
-        btn.configure(text="Sign in")
+        btn.configure(text="登录")
         btn.grid(row=0, column=2)
         return btn
 
     @callback
     async def sign_in(self, event=None):
-        self.tk_label_account.configure(text="Working...")
+        self.tk_label_account.configure(text="进行中...")
         self.tk_input_account.configure(state=tkinter.DISABLED)
+        self.tk_button_account.configure(state=tkinter.DISABLED)
         
         # 8613950209512
         account = self.tk_input_account.get().strip()
+        if account == "":
+            self.tk_label_account.configure(text="登录 (手机号/token):")
+            self.tk_input_account.configure(state=tkinter.NORMAL)
+            self.tk_button_account.configure(state=tkinter.NORMAL)
+            tkinter.messagebox.showerror(title="错误", message="手机号/token不能为空", )
+            return
+
         if self.first_input_value is None:
             self.first_input_value = account
         # account = "8613950209512"
         # account = "5797820537:AAFSi75rB-mci13W7IaIoJdwujaVSkRIdnU"
+        # is_success = True
         if self.tgClient == None:
             self.tgClient = TgClient(account).getClient()
             await self.tgClient.connect()
+            # try:
+            #     self.tgClient = TgClient(account).getClient()
+            #     await self.tgClient.connect()
+            # except Exception as e:
+            #     print(e)
+            #     is_success = False
+            #     tkinter.messagebox.showerror(title="错误", message="无法连接到telegram服务,请检查网络", )
+
+        # if not is_success:
+        #     return
 
         auth = await self.tgClient.is_user_authorized()
         print("auth...", auth)
@@ -505,7 +553,7 @@ class Frame_login(tkinter.LabelFrame):
 
         if self.code:
             signLabel = self.tk_label_account.cget("text")
-            if signLabel == "Two-steps verification:" or self.twoSteps:
+            if signLabel == "两步验证:" or self.twoSteps:
                 self.set_signed_in(await self.tgClient.sign_in(password=account))
                 return
 
@@ -513,20 +561,22 @@ class Frame_login(tkinter.LabelFrame):
                 self.set_signed_in(await self.tgClient.sign_in(code=account))
             except telethon.errors.SessionPasswordNeededError:
                 self.twoSteps = True
-                self.tk_label_account.configure(text='Two-steps verification:')
+                self.tk_label_account.configure(text='两步验证:')
                 self.tk_input_account.configure(state=tkinter.NORMAL)
                 self.tk_input_account.delete(0, tkinter.END)
                 self.tk_input_account.focus()
+                self.tk_button_account.configure(state=tkinter.NORMAL)
             except Exception as e:
                 print("e", e)
         elif ":" in account:
             self.set_signed_in(await self.tgClient.sign_in(bot_token=account))
         else:
             self.code = await self.tgClient.send_code_request(account)
-            self.tk_label_account.configure(text="Code:")
+            self.tk_label_account.configure(text="验证码:")
             self.tk_input_account.configure(state=tkinter.NORMAL)
             self.tk_input_account.delete(0, tkinter.END)
             self.tk_input_account.focus()
+            self.tk_button_account.configure(state=tkinter.NORMAL)
             return
 
     def set_signed_in(self, me):
@@ -535,10 +585,13 @@ class Frame_login(tkinter.LabelFrame):
         name and disables the entry to input phone/bot token/code).
         """
         self.me = me
-        self.tk_label_account.configure(text='Signed in')
+        self.tk_label_account.configure(text='已登录')
         self.tk_input_account.configure(state=tkinter.NORMAL)
         self.tk_input_account.delete(0, tkinter.END)
+        self.tk_button_account.configure(state=tkinter.NORMAL)
 
+        self.tk_input_remark_account.configure(state=tkinter.NORMAL)
+        self.tk_input_remark_account.focus()
         self.tk_btn_add_account.configure(state=tkinter.NORMAL)
 
         try:
@@ -547,7 +600,7 @@ class Frame_login(tkinter.LabelFrame):
         except Exception as e:
             pass
         self.tk_input_account.configure(state=tkinter.DISABLED)
-        self.tk_button_account.configure(text='Log out')
+        self.tk_button_account.configure(text='登出')
         # self.chat.focus()
             
 
@@ -568,7 +621,7 @@ class Frame_account(tkinter.LabelFrame):
         data = readDataByName("account")
         account_data = data.split("\n")
         for i in range(len(account_data)):
-            item = ",".join(map(str, account_data[i].split(",")[0: 2]))
+            item = ",".join(map(str, account_data[i].split(",")[0: 3]))
             if item == "":
                 continue
             self.tk_listbox_account.insert(tkinter.END, item)
@@ -582,6 +635,9 @@ class Frame_account(tkinter.LabelFrame):
 
     @callback
     async def on_btn_remove_account(self):
+        result = tkinter.messagebox.askquestion(title="提示", message="确定移除账号?", icon="warning")
+        if result != "yes":
+            return
         # 获取选中的账号
         select = self.parent.tk_listbox_account.curselection()
         print(select)
@@ -727,7 +783,7 @@ class Frame_messageTemplate(tkinter.LabelFrame):
         
         # 读取配置文件 config.ini
         config = configparser.ConfigParser()
-        config.read("config_ini.ini")
+        config.read("config_ini.ini", encoding="utf-8")
         self.conf = config
         
         self.__frame()
@@ -797,7 +853,7 @@ class Frame_messageTemplate(tkinter.LabelFrame):
         self.conf.set("message", "check_file", check_file)
         self.conf.set("message", "content", messageValue)
         self.conf.set("message", "file_path", image_path)
-        with open("config_ini.ini", "w") as configFile:
+        with open("config_ini.ini", "w", encoding="utf-8") as configFile:
             self.conf.write(configFile)
 
 
@@ -822,6 +878,17 @@ class Frame_Receiver(tkinter.LabelFrame):
         self.textGroup = tkinter.Text(self)
         self.textGroup.place(x=0, y=24, width=250-5, height=200)
 
+        self.__load_tk_group_data()        
+
+    def __tk_phone(self):
+        tkinter.Label(self, text="手机号(+区号)/用户名:").place(x=0, y=200+10+24)
+        self.textPhone = tkinter.Text(self)
+        self.textPhone.place(x=0, y=200+10+24*2, width=250-5, height=200)
+
+        self.__load_tk_phone_data()
+
+    # 加载群组/频道数据
+    def __load_tk_group_data(self):
         groupLinkData = readDataByName("groupLink")
         groupLinkDatas = groupLinkData.split("\n")
         for i in range(len(groupLinkDatas)):
@@ -830,12 +897,9 @@ class Frame_Receiver(tkinter.LabelFrame):
                 suffix = ""
             self.textGroup.insert(tkinter.END, groupLinkDatas[i] + suffix)
             self.groupList.append(groupLinkDatas[i])
-
-    def __tk_phone(self):
-        tkinter.Label(self, text="手机号(+区号):").place(x=0, y=200+10+24)
-        self.textPhone = tkinter.Text(self)
-        self.textPhone.place(x=0, y=200+10+24*2, width=250-5, height=200)
-
+    
+    # 加载手机号/用户名数据
+    def __load_tk_phone_data(self):
         phoneNumberData = readDataByName("phoneNumber")
         phoneNumberDatas = phoneNumberData.split("\n")
         for i in range(len(phoneNumberDatas)):
@@ -844,6 +908,7 @@ class Frame_Receiver(tkinter.LabelFrame):
                 suffix = ""
             self.textPhone.insert(tkinter.END, phoneNumberDatas[i] + suffix)
             self.phoneList.append(phoneNumberDatas[i])
+
 
     def __tk_button(self):
         btn = tkinter.Button(self, text="保存", command=self.on_btn_save)
@@ -856,6 +921,13 @@ class Frame_Receiver(tkinter.LabelFrame):
 
         phoneNumberData = self.textPhone.get("1.0", tkinter.END).strip()
         saveDataByName("phoneNumber", phoneNumberData)
+
+        self.textGroup.delete("0", "end")
+        self.groupList = []
+        self.__load_tk_group_data()
+        self.textPhone.delete("0", "end")
+        self.phoneList = []
+        self.__load_tk_phone_data()
 
 
 
@@ -924,9 +996,8 @@ class Frame_Button(tkinter.LabelFrame):
         
         return (True, messageValue, image_path)
 
-
-
-    async def send_msg(self):
+    
+    async def on_send_msg(self):
         # print(len(globalTgClientList))
         # size = self.parent.tk_listbox_account.size()
         # print(size)
@@ -942,12 +1013,17 @@ class Frame_Button(tkinter.LabelFrame):
         # self.parent.tk_listbox_account.delete(0, size - 1)
 
 
-        # 获取一个非bot,拿到chat_id
+        # 获取一个实体号,拿到chat_id
+        # 实体号也可能拿不到群/频道信息,没有进行群/频道的情况
+        is_get_entity_flag = False # 是否有实体号,获取过群/频道信息
         entity_list = []
         for tg in globalTgClientList:
             me = await tg.get_me()
             if not me.bot:
+                is_get_entity_flag = True
                 for rec in self.parent.groupList:
+                    if rec == "":
+                        continue
                     print("groupList rec", rec)
                     try:
                         entity = await tg.get_entity(rec)
@@ -955,6 +1031,8 @@ class Frame_Button(tkinter.LabelFrame):
                     except Exception as e:
                         print(e)
                 for rec in self.parent.phoneList:
+                    if rec == "":
+                        continue
                     print("phoneList rec", rec)
                     try:
                         entity = await tg.get_entity(rec)
@@ -965,8 +1043,12 @@ class Frame_Button(tkinter.LabelFrame):
         
 
 
-        if len(entity_list) == 0:
+        if len(entity_list) == 0 and not is_get_entity_flag:
             tkinter.messagebox.showerror(title="错误", message="必须添加一个非机器人账号", )
+            return
+
+        if len(entity_list) == 0 and is_get_entity_flag:
+            tkinter.messagebox.showerror(title="错误", message="请检查待发送的账号和目标关系,是否无法发送?", )
             return
 
         for tg in globalTgClientList:
@@ -1026,6 +1108,11 @@ class Frame_Button(tkinter.LabelFrame):
 
         if not self.scheduler.running:
             self.tk_label_send_status.config(text="执行完成,成功{0}次,失败{1}次".format(self.schedulerTaskSuccessCount, self.schedulerTaskFailedCount))
+
+    async def send_msg(self):
+        # 创建异步任务
+        asyncio.create_task(self.on_send_msg())
+        
         
 
 
@@ -1052,11 +1139,17 @@ class Frame_Button(tkinter.LabelFrame):
 
     @callback
     async def on_once_send(self):
+        result = tkinter.messagebox.askquestion(title="提示", message="确定立即发送?", icon="warning")
+        if result != "yes":
+            return
         await self.send_msg()
 
 
     @callback
     def on_schedule_send(self):
+        result = tkinter.messagebox.askquestion(title="提示", message="确定定时发送?", icon="warning")
+        if result != "yes":
+            return
         result, _, _ = self.check_send_msg()
         if not result:
             return
@@ -1167,7 +1260,7 @@ class TgClient():
         session = "{0}/{1}".format(sessionPath, session)
 
         config = configparser.ConfigParser()
-        config.read("config_ini.ini")
+        config.read("config_ini.ini", encoding="utf-8")
         enable = config.get("proxy", "enable")
         mode = config.get("proxy", "mode")
         host = config.get("proxy", "host")
@@ -1178,20 +1271,24 @@ class TgClient():
                 self.client = TelegramClient(session, 
                         API_ID, 
                         API_HASH, 
-                        proxy=(socks.SOCKS5, host, int(port)))
+                        proxy=(socks.SOCKS5, host, int(port)), 
+                        loop=loop)
             elif str(mode).lower() == "http":
                 self.client = TelegramClient(session, 
                         API_ID, 
                         API_HASH, 
-                        proxy=(socks.HTTP, host, int(port)))
+                        proxy=(socks.HTTP, host, int(port)), 
+                        loop=loop)
             else:
                 self.client = TelegramClient(session=session,
                     api_id=API_ID,
-                    api_hash=API_HASH)
+                    api_hash=API_HASH, 
+                    loop=loop)
         else:
             self.client = TelegramClient(session=session,
                 api_id=API_ID,
-                api_hash=API_HASH)
+                api_hash=API_HASH, 
+                loop=loop)        
     
     def getClient(self):
         return self.client
@@ -1244,6 +1341,7 @@ async def main(interval=0.05):
 
 # https://www.pytk.net/tkinter-helper/
 if __name__ == "__main__":
-    asyncio.run(main())
+    # asyncio.run(main())
+    loop.run_until_complete(main())
 
     

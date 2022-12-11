@@ -5,10 +5,13 @@ pyinstaller -F -w gui_main_001.py
 
 
 ```shell
+# 安装py2app
 pip3 install py2app
 
-py2applet --make-setup gui_main.py
+# 生成配置文件
+py2applet --make-setup gui_main_001.py
 
+# 生成mac客户端应用程序
 python3 setup.py py2app
 python3 setup.py py2app --packages=telethon,PIL
 python3 setup.py py2app --packages=PIL
